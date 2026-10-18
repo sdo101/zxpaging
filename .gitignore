@@ -1,0 +1,18 @@
+# everything the build makes goes in here, all of it is recreated by build.ps1
+build/
+
+# the build log, and the dated copies of it in logs/
+*.log
+
+# the nex file, made beside build.ps1
+*.nex
+
+# the SD card images, 64MB each: the base holds the NextZXOS installation, the others are copies of it with the demo on them
+*.mmc
+
+# what the demo writes when it is run from this folder with zf: the saved data, and the page the start up test saves
+zxpaging.sav
+zxpagingtest.bin
+
+# files ZEsarUX writes for itself
+*.idx

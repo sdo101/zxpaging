@@ -1,0 +1,28 @@
+{
+    // debugging zxpaging with the DeZog extension, which drives the ZEsarUX emulator, when this folder is opened in VS Code
+    "version": "0.2.0",
+    "configurations": [
+        {
+            // F5: builds zxpaging if anything has changed, starts ZEsarUX waiting on port 10001 (build.ps1 -Start zd),
+            // loads the nex file into it and stops at its first instruction, in the loader
+            "type": "dezog",
+            "request": "launch",
+            "name": "zxpaging in ZEsarUX",
+            "remoteType": "zrcp",
+            "zrcp": {
+                "hostname": "localhost",
+                "port": 10001
+            },
+            "rootFolder": "${workspaceFolder}",
+            // which address, in which page, is which line of source: made by tools\make-sld.py during the build
+            "sjasmplus": [
+                {
+                    "path": "build/zxpaging.sld"
+                }
+            ],
+            "load": "zxpaging.nex",
+            "startAutomatically": false,
+            "preLaunchTask": "zxpaging: build, and start the emulator for the debugger"
+        }
+    ]
+}
