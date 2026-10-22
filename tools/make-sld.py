@@ -26,16 +26,31 @@ BUILD = 'build'
 SOURCE = 'src'
 
 
+def version_key(name):
+    # a version folder's name as a tuple made up to four numbers with 0s, so that 13.0 and 13.0.0 are alike, as the
+    # [version]s of build.ps1 are, None if it is not a version number
+    parts = name.split('.')
+    if len(parts) > 4 or not all(p.isdigit() for p in parts):
+        return None
+    return tuple(int(p) for p in parts) + (0,) * (4 - len(parts))
+
+
 def find_assembler():
-    # Boriel's assembler is in the root folder that holds the tools, found as build.ps1 finds it: the nearest folder
-    # above the project's that has boriel\zxbc.py in it
+    # Boriel's assembler, beside the compiler: in the folder build.ps1 chose (--compiler, the pinned version or the
+    # newest), or, run on its own, the newest version in the root folder that holds the tools, found as build.ps1
+    # finds it: the nearest folder above the project's that has boriel\<version>\zxbc.py in it
+    if '--compiler' in sys.argv:
+        return os.path.join(sys.argv[sys.argv.index('--compiler') + 1], 'zxbasm.py')
     folder = ROOT
     while True:
-        if os.path.isfile(os.path.join(folder, 'boriel', 'zxbc.py')):
-            return os.path.join(folder, 'boriel', 'zxbasm.py')
+        tools = os.path.join(folder, 'boriel')
+        if os.path.isdir(tools):
+            versions = [v for v in os.listdir(tools) if version_key(v) and os.path.isfile(os.path.join(tools, v, 'zxbc.py'))]
+            if versions:
+                return os.path.join(tools, max(versions, key=version_key), 'zxbasm.py')
         parent = os.path.dirname(folder)
         if parent == folder:
-            sys.exit('no folder above %s has boriel\\zxbc.py in it' % ROOT)
+            sys.exit('no folder above %s has boriel\\<version>\\zxbc.py in it' % ROOT)
         folder = parent
 
 

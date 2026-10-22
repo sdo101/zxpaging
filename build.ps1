@@ -26,8 +26,11 @@ $ErrorActionPreference = 'Stop'
 #   v0.10   18-Oct-2026   sdo   The emulator settings for zf, za, zb and zd are made in build when src\zesarux.cfg, or this
 #                               script, is newer than them, not at every start; the breakpoints in it are commented out.
 #   v0.11   18-Oct-2026   sdo   zxpaging: a copy of poc2demo as it stood at v0.10, under its new name, to be shared.
+#   v0.12   22-Oct-2026   sdo   The tools are in version folders (boriel\1.19.0, sjasmplus\1.24.0, zesarux\13.0), and the
+#                               newest of each is used unless one is pinned ($CompilerPinned and so on), the folders' names
+#                               compared as [version]s made up to four parts with 0s, as 13.0 against 13.0.0 goes wrong.
 ###################################################################################################################################
-$myScriptVersion = 'v0.11'
+$myScriptVersion = 'v0.12'
 ###################################################################################################################################
 #endregion
 
@@ -208,21 +211,54 @@ $EmulatorName   = 'zesarux'
 $ToolsName      = 'tools'
 $ProjectName    = $myScriptPath.Name        # the folder this script is in: the nex file and the card images are named after it
 
+# the tools' versions: each tool's folder holds a folder for each version of it, named by its version number
+# (boriel\1.19.0, sjasmplus\1.24.0, zesarux\13.0), and the newest is used unless a version is written in here, e.g.
+# $CompilerPinned = '1.18.2' to stay with an older compiler
+$CompilerPinned = ''
+$LinkerPinned   = ''
+$EmulatorPinned = ''
+
+Function ConvertTo-ToolVersion( [string]$Text ) {
+    # a folder's name as a [version], or $Null if it is not a version number, N.B: made up to four parts with 0s, a
+    # [version] of fewer parts leaves the others at -1 and then 13.0 is less than 13.0.0 and the comparing goes wrong
+    $Parts = @( $Text.Split( '.' ) )
+    If ( $Parts.Count -gt 4 -or @( $Parts | Where-Object { $_ -notmatch '^\d+$' } ).Count -gt 0 ) { Return $Null }
+    While ( $Parts.Count -lt 4 ) { $Parts += '0' }
+    Return [version]( $Parts -join '.' )
+}
+
+Function Get-ToolVersionPath( [string]$ToolPath, [string]$Pinned ) {
+    # the folder of the version of a tool to use: the one pinned above, or the newest there is, $Null if none
+    If ( $Pinned ) { Return ( Join-Path -Path $ToolPath -ChildPath $Pinned ) }
+    $Newest = Get-ChildItem -Path $ToolPath -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $Null -ne ( ConvertTo-ToolVersion $_.Name ) } |
+        Sort-Object -Property { ConvertTo-ToolVersion $_.Name } -Descending |
+        Select-Object -First 1
+    If ( $Newest ) { Return $Newest.FullName }
+    Return $Null
+}
+
 # the root folder that holds the tools is found, not written in: it is the nearest folder above this script's that has the
-# compiler in it (boriel\zxbc.py), so the project works wherever it is put, at any depth below the root
+# compiler in it (boriel\<version>\zxbc.py), so the project works wherever it is put, at any depth below the root
 $RootPath       = $myScriptPath
-While ( $RootPath -and -not ( Test-Path -Path ( Join-Path -Path $RootPath.FullName -ChildPath "$CompilerName\zxbc.py" ) -PathType Leaf ) ) {
+While ( $RootPath -and -not ( Get-ChildItem -Path ( Join-Path -Path $RootPath.FullName -ChildPath $CompilerName ) -Directory -ErrorAction SilentlyContinue | Where-Object { Test-Path -Path ( Join-Path -Path $_.FullName -ChildPath 'zxbc.py' ) -PathType Leaf } ) ) {
     $RootPath = $RootPath.Parent
 }
-If ( -not $RootPath ) { Abort "...no folder above $myScriptPath has the compiler in it ($CompilerName\zxbc.py)" }
+If ( -not $RootPath ) { Abort "...no folder above $myScriptPath has the compiler in it ($CompilerName\<version>\zxbc.py)" }
 $RootPath       = $RootPath.FullName
 Log "...root:       $RootPath"
 
 $DocsPath       = Join-Path -Path $RootPath -ChildPath 'docs'
 $DownloadsPath  = Join-Path -Path $RootPath -ChildPath 'downloads'
-$CompilerPath   = Join-Path -Path $RootPath -ChildPath $CompilerName
-$LinkerPath     = Join-Path -Path $RootPath -ChildPath $LinkerName
-$EmulatorPath   = Join-Path -Path $RootPath -ChildPath $EmulatorName
+$CompilerPath   = Get-ToolVersionPath ( Join-Path -Path $RootPath -ChildPath $CompilerName ) $CompilerPinned
+$LinkerPath     = Get-ToolVersionPath ( Join-Path -Path $RootPath -ChildPath $LinkerName )   $LinkerPinned
+$EmulatorPath   = Get-ToolVersionPath ( Join-Path -Path $RootPath -ChildPath $EmulatorName ) $EmulatorPinned
+ForEach ( $Tool In @( @( $CompilerName, $CompilerPath ), @( $LinkerName, $LinkerPath ), @( $EmulatorName, $EmulatorPath ) ) ) {
+    If ( -not $Tool[1] -or -not ( Test-Path -Path $Tool[1] -PathType Container ) ) { Abort "...no version of $( $Tool[0] ) in $( Join-Path -Path $RootPath -ChildPath $Tool[0] ), or not the one pinned" }
+}
+Log "...compiler:   $CompilerPath"
+Log "...linker:     $LinkerPath"
+Log "...emulator:   $EmulatorPath"
 $ToolsPath      = Join-Path -Path $RootPath -ChildPath $ToolsName
 $ProjectPath    = $myScriptPath.FullName
 
@@ -670,7 +706,7 @@ Log "...entry bank:     $( $NexBytes[139] )"
 # ...only the modules compiled since the last time are worked out again, and the build goes on without the file if
 # it cannot be made, the program does not need it
 Log '...debugging data...'
-Run 'python' @( 'tools\make-sld.py', $ProjectName, '--jobs', $Jobs ) -AllowFailure
+Run 'python' @( 'tools\make-sld.py', $ProjectName, '--jobs', $Jobs, '--compiler', $CompilerPath ) -AllowFailure
 If ( $script:RunStatus -ne 0 ) { Log '...the debugging data is not complete, see above, the build goes on...' Yellow }
 #endregion
 
